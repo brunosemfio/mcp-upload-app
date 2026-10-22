@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+# safety net: never commit service-account keys or App Store Connect private keys
+*.json
+*.p8
+.env
+upload_app_mcp/fastlane/report.xml

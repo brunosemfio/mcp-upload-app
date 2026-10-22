@@ -1,0 +1,130 @@
+# Upload App MCP Server
+
+Servidor MCP (Model Context Protocol) para enviar um `.aab` para uma faixa de teste da Google Play ou um `.ipa` para o TestFlight e depois promover para produção. O servidor não gera o build: cada projeto de app gera o próprio arquivo, e as ferramentas só recebem o caminho. Por baixo, o servidor roda lanes do [fastlane](https://fastlane.tools) que vêm dentro do pacote.
+
+## Ferramentas expostas
+
+- `upload_android` — envia um `.aab` para uma faixa de teste (`internal`, `alpha` ou `beta`; padrão `internal`)
+- `promote_android` — promove um version code de uma faixa de teste para produção, com rollout gradual opcional
+- `upload_ios` — envia um `.ipa` para o TestFlight, sem esperar o processamento da Apple
+- `release_ios` — anexa um build do TestFlight a uma versão da App Store, cria a versão se ela não existir e envia para review
+
+`promote_android` e `release_ios` só publicam com `confirm=true`. Sem ele, `promote_android` valida a promoção na Google Play sem publicar nada, e `release_ios` só descreve o que vai fazer.
+
+## Pré-requisitos
+
+Funciona só no macOS, porque o envio para o TestFlight depende do Xcode.
+
+- [uv](https://docs.astral.sh/uv/): baixa e executa o servidor. Se a máquina não tiver Python 3.10 ou mais novo, o `uv` baixa um sozinho.
+- [git](https://git-scm.com/): o `uvx` usa o git para baixar o código deste repositório.
+- [fastlane](https://fastlane.tools): faz os envios para as lojas.
+- [Xcode](https://developer.apple.com/xcode/): necessário para `upload_ios`.
+
+Com [Homebrew](https://brew.sh/):
+
+```bash
+brew install uv git fastlane
+```
+
+## Configuração
+
+### 1. Google Play
+
+1. No Google Cloud, habilite a [Google Play Android Developer API](https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com), crie uma service account e baixe a chave JSON.
+2. No Play Console, em **Usuários e permissões → Convidar novo usuário**, convide o e-mail da service account com as permissões de lançamento em faixas de teste e em produção nos apps desejados.
+3. Guarde a chave num local fixo e anote o caminho completo. O caminho vai na variável `GOOGLE_APPLICATION_CREDENTIALS` quando você registrar o servidor no cliente MCP.
+
+### 2. App Store Connect
+
+O servidor usa as mesmas variáveis do [mcp-app-store-connect](https://github.com/brunosemfio/mcp-app-store-connect):
+
+| Variável | Valor |
+|---|---|
+| `APP_STORE_CONNECT_KEY_ID` | Key ID da chave, ex. `2X9R4HXF34` |
+| `APP_STORE_CONNECT_ISSUER_ID` | Issuer ID, ex. `57246542-96fe-1a63-e053-0824d011072a` |
+| `APP_STORE_CONNECT_PRIVATE_KEY_PATH` | Caminho completo do `.p8` |
+
+Se você já criou o arquivo `~/.config/app-store-connect/.env` para aquele servidor, este lê o mesmo arquivo e não precisa de mais nada. Para usar outro arquivo, defina `APP_STORE_CONNECT_ENV_FILE` com o caminho dele. Variáveis já definidas no ambiente têm prioridade sobre o arquivo.
+
+A chave precisa da função App Manager ou Admin para enviar builds para review.
+
+## Instalação e uso
+
+### Claude Code
+
+1. Registre o servidor. O `--scope user` deixa o servidor disponível em qualquer pasta.
+
+   ```bash
+   claude mcp add --scope user upload-app \
+     --env GOOGLE_APPLICATION_CREDENTIALS=/Users/voce/keys/play-publisher.json \
+     -- uvx --from git+https://github.com/brunosemfio/mcp-upload-app.git upload-app-mcp
+   ```
+
+2. Rode `claude mcp list`. O `upload-app` deve aparecer como conectado.
+
+Para trocar algum valor, remova o servidor com `claude mcp remove --scope user upload-app` e registre de novo.
+
+### Claude Desktop
+
+Abra o arquivo de configuração em **Settings → Developer → Edit Config** e adicione o servidor dentro de `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "upload-app": {
+      "command": "/opt/homebrew/bin/uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/brunosemfio/mcp-upload-app.git",
+        "upload-app-mcp"
+      ],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/Users/voce/keys/play-publisher.json",
+        "PATH": "/opt/homebrew/bin:/usr/bin:/bin"
+      }
+    }
+  }
+}
+```
+
+- Troque `/opt/homebrew/bin/uvx` pelo resultado de `which uvx`.
+- O `PATH` deixa o servidor encontrar o `fastlane`. O Claude Desktop aberto pelo Dock não enxerga o PATH do terminal.
+
+Encerre o Claude Desktop com Cmd+Q e abra de novo para carregar a configuração.
+
+O `uvx` faz cache do build: para atualizar após novos commits, rode o comando uma vez com `--refresh`. Para fixar uma versão, aponte para uma tag ou commit: `git+https://...@<tag-ou-sha>`.
+
+### A partir de um clone local (desenvolvimento)
+
+```bash
+git clone https://github.com/brunosemfio/mcp-upload-app.git
+cd mcp-upload-app
+uv sync
+uv run upload-app-mcp
+```
+
+Para registrar no cliente MCP, use como comando o executável que o `uv sync` cria dentro do clone: `/caminho/do/clone/.venv/bin/upload-app-mcp`.
+
+## Desenvolvimento
+
+```bash
+uv sync --extra dev
+uv run pytest
+uv run ruff check upload_app_mcp tests
+uv run mypy upload_app_mcp
+```
+
+Os testes não chamam o fastlane nem as lojas. O CI (GitHub Actions, branch `main`) roda ruff, mypy e a suíte com cobertura mínima de 65% em Python 3.10 e 3.12.
+
+## Exemplos de perguntas
+
+- "Envie /caminho/app-release.aab para a faixa internal do com.example.app."
+- "Promova o version code 42 do com.example.app para produção com rollout de 20%."
+- "Envie o build 15 da versão 1.2.0 do com.example.app para review."
+
+## Notas
+
+- `upload_ios` não espera o processamento da Apple, que costuma levar de 10 a 30 minutos. O build só pode ir para review depois disso.
+- `release_ios` não altera os metadados da versão. Preencha as novidades da versão no App Store Connect antes de enviar. O `Info.plist` do app precisa declarar `ITSAppUsesNonExemptEncryption`; sem isso, a Apple pede a conformidade de exportação e o envio falha.
+- `rollout` aceita valores maiores que 0 e até 1. Abaixo de 1, a release entra em produção como lançamento gradual.
+- Cada ferramenta devolve as últimas 40 linhas da saída do fastlane e tem timeout de 30 minutos.
