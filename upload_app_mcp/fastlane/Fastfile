@@ -2,6 +2,7 @@ require "dotenv"
 require "tmpdir"
 
 Dotenv.load(File.expand_path(ENV.fetch("APP_STORE_CONNECT_ENV_FILE", "~/.config/app-store-connect/.env")))
+Dotenv.load(File.expand_path(ENV.fetch("PLAY_CONSOLE_ENV_FILE", "~/.config/google-play-console/.env")))
 ENV["SUPPLY_JSON_KEY"] ||= ENV["GOOGLE_APPLICATION_CREDENTIALS"]
 
 SKIP_STORE_LISTING = {
