@@ -37,13 +37,13 @@ brew install uv git fastlane
 2. No Play Console, em **Usuários e permissões → Convidar novo usuário**, convide o e-mail da service account com as permissões de lançamento em faixas de teste e em produção nos apps desejados.
 3. Guarde a chave num local fixo e anote o caminho completo. O caminho vai na variável `GOOGLE_APPLICATION_CREDENTIALS` quando você registrar o servidor no cliente MCP.
 
-Se você já criou o arquivo `~/.config/google-play-console/.env` para o [mcp-google-play-console](https://github.com/brunosemfio/mcp-google-play-console), este servidor lê o mesmo arquivo. Se a chave de publicação for diferente da chave de relatórios daquele servidor, acrescente o caminho dela ao arquivo na variável `SUPPLY_JSON_KEY`:
+Se você já criou o arquivo `~/.config/google-play-console/.env` para o [mcp-google-play-console](https://github.com/brunosemfio/mcp-google-play-console), este servidor lê o mesmo arquivo. Acrescente ao arquivo o caminho da chave de publicação na variável `SUPPLY_JSON_KEY`:
 
 ```bash
 echo 'SUPPLY_JSON_KEY=/Users/voce/keys/play-publisher.json' >> ~/.config/google-play-console/.env
 ```
 
-Com uma service account só para os dois servidores, o `GOOGLE_APPLICATION_CREDENTIALS` do arquivo basta. Para usar outro arquivo, defina `PLAY_CONSOLE_ENV_FILE` com o caminho dele. Variáveis já definidas no ambiente têm prioridade sobre o arquivo, mas o `SUPPLY_JSON_KEY` do arquivo tem prioridade sobre o `GOOGLE_APPLICATION_CREDENTIALS` do ambiente.
+Se a mesma service account publica e lê relatórios, use o mesmo caminho do `PLAY_CONSOLE_CREDENTIALS`. Para usar outro arquivo, defina `PLAY_CONSOLE_ENV_FILE` com o caminho dele. Variáveis já definidas no ambiente têm prioridade sobre o arquivo, mas o `SUPPLY_JSON_KEY` do arquivo tem prioridade sobre o `GOOGLE_APPLICATION_CREDENTIALS` do ambiente.
 
 ### 2. App Store Connect
 
