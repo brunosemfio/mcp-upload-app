@@ -4,12 +4,15 @@ Servidor MCP (Model Context Protocol) para enviar um `.aab` para uma faixa de te
 
 ## Ferramentas expostas
 
-- `upload_android` — envia um `.aab` para uma faixa de teste (`internal`, `alpha` ou `beta`; padrão `internal`)
-- `promote_android` — promove um version code de uma faixa de teste para produção, com rollout gradual opcional
+- `upload_android` — envia um `.aab` para uma faixa de teste (`internal`, `alpha`, `beta` ou o nome de uma faixa fechada personalizada; padrão `internal`)
+- `promote_android` — promove um version code de uma faixa de teste para produção, com rollout gradual e notas da versão opcionais
+- `update_rollout_android` — muda a fração de uma release de produção, completa o rollout com `1` ou para a release com `halt=true`
+- `status_android` — lista as releases de cada faixa, com version codes, status e fração do rollout
 - `upload_ios` — envia um `.ipa` para o TestFlight, sem esperar o processamento da Apple
-- `release_ios` — anexa um build do TestFlight a uma versão da App Store, cria a versão se ela não existir e envia para review
+- `release_ios` — anexa um build do TestFlight a uma versão da App Store, cria a versão se ela não existir e envia para review, com as novidades da versão opcionais
+- `status_ios` — mostra as últimas versões da App Store com o estado de cada uma e os últimos builds com o estado do processamento
 
-`promote_android` e `release_ios` só publicam com `confirm=true`. Sem ele, `promote_android` valida a promoção na Google Play sem publicar nada, e `release_ios` só descreve o que vai fazer.
+`promote_android`, `update_rollout_android` e `release_ios` só publicam com `confirm=true`. Sem ele, as duas ferramentas do Android validam a mudança na Google Play sem publicar nada, e `release_ios` só descreve o que vai fazer.
 
 ## Pré-requisitos
 
@@ -119,12 +122,15 @@ Os testes não chamam o fastlane nem as lojas. O CI (GitHub Actions, branch `mai
 ## Exemplos de perguntas
 
 - "Envie /caminho/app-release.aab para a faixa internal do com.example.app."
-- "Promova o version code 42 do com.example.app para produção com rollout de 20%."
-- "Envie o build 15 da versão 1.2.0 do com.example.app para review."
+- "Promova o version code 42 do com.example.app para produção com rollout de 20% e a nota 'Correções de bugs'."
+- "O crash rate da versão 42 subiu. Pare o rollout."
+- "O build 15 do com.example.app já terminou de processar? Se sim, envie a versão 1.2.0 para review."
 
 ## Notas
 
-- `upload_ios` não espera o processamento da Apple, que costuma levar de 10 a 30 minutos. O build só pode ir para review depois disso.
-- `release_ios` não altera os metadados da versão. Preencha as novidades da versão no App Store Connect antes de enviar. O `Info.plist` do app precisa declarar `ITSAppUsesNonExemptEncryption`; sem isso, a Apple pede a conformidade de exportação e o envio falha.
-- `rollout` aceita valores maiores que 0 e até 1. Abaixo de 1, a release entra em produção como lançamento gradual.
+- `upload_ios` não espera o processamento da Apple, que costuma levar de 10 a 30 minutos. Use `status_ios`: o build só pode ir para review quando estiver `VALID`.
+- Sem `release_notes`, `release_ios` não altera os metadados da versão, e as novidades precisam estar preenchidas no App Store Connect. Com `release_notes`, o texto vai para todos os idiomas da versão publicada, ou para o idioma principal do app se ainda não houver versão publicada.
+- No `promote_android`, `locale` é o código de idioma da Play para as notas da versão, por padrão `pt-BR`.
+- O `Info.plist` do app precisa declarar `ITSAppUsesNonExemptEncryption`; sem isso, a Apple pede a conformidade de exportação e o envio para review falha.
+- `rollout` aceita valores maiores que 0 e até 1. Abaixo de 1, a release entra em produção como lançamento gradual. Para retomar uma release parada, chame `update_rollout_android` com uma nova fração.
 - Cada ferramenta devolve as últimas 40 linhas da saída do fastlane e tem timeout de 30 minutos.

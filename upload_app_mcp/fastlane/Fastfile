@@ -1,14 +1,41 @@
 require "dotenv"
+require "tmpdir"
 
 Dotenv.load(File.expand_path(ENV.fetch("APP_STORE_CONNECT_ENV_FILE", "~/.config/app-store-connect/.env")))
 ENV["SUPPLY_JSON_KEY"] ||= ENV["GOOGLE_APPLICATION_CREDENTIALS"]
 
 SKIP_STORE_LISTING = {
   skip_upload_metadata: true,
-  skip_upload_changelogs: true,
   skip_upload_images: true,
   skip_upload_screenshots: true
 }.freeze
+
+def play_client(package_name)
+  require "supply"
+  Supply.config = FastlaneCore::Configuration.create(Supply::Options.available_options, { package_name: package_name })
+  client = Supply::Client.make_from_config
+  client.begin_edit(package_name: package_name)
+  client
+end
+
+def play_release_notes(options)
+  return { skip_upload_changelogs: true } unless options[:release_notes]
+
+  dir = Dir.mktmpdir
+  changelogs = File.join(dir, options[:locale], "changelogs")
+  FileUtils.mkdir_p(changelogs)
+  File.write(File.join(changelogs, "default.txt"), options[:release_notes])
+  { skip_upload_changelogs: false, metadata_path: dir }
+end
+
+def app_store_release_notes(options)
+  return { skip_metadata: true } unless options[:release_notes]
+
+  app = Spaceship::ConnectAPI::App.find(options[:app_identifier])
+  live = app.get_live_app_store_version
+  locales = live ? live.get_app_store_version_localizations.map(&:locale) : [app.primary_locale]
+  { skip_metadata: false, release_notes: locales.to_h { |locale| [locale, options[:release_notes]] } }
+end
 
 platform :android do
   lane :upload do |options|
@@ -16,6 +43,7 @@ platform :android do
       package_name: options[:package_name],
       aab: options[:aab],
       track: options[:track] || "internal",
+      skip_upload_changelogs: true,
       **SKIP_STORE_LISTING
     )
   end
@@ -30,8 +58,44 @@ platform :android do
       validate_only: options[:validate_only] == true,
       skip_upload_aab: true,
       skip_upload_apk: true,
+      **play_release_notes(options),
       **SKIP_STORE_LISTING
     )
+  end
+
+  lane :rollout do |options|
+    client = play_client(options[:package_name])
+    track = client.tracks("production").first
+    release = track&.releases&.find { |r| (r.version_codes || []).include?(options[:version_code].to_s) }
+    UI.user_error!("Version code #{options[:version_code]} is not in production") unless release
+
+    if options[:halt] == true
+      release.status = "halted"
+    else
+      fraction = options[:rollout].to_f
+      release.status = fraction < 1 ? "inProgress" : "completed"
+      release.user_fraction = fraction < 1 ? fraction : nil
+    end
+    track.releases = [release]
+    client.update_track("production", track)
+
+    if options[:validate_only] == true
+      client.validate_current_edit!
+      UI.success("Validated #{release.status} #{release.user_fraction} with Google Play, nothing published")
+    else
+      client.commit_current_edit!
+      UI.success("Production release #{options[:version_code]} is now #{release.status} #{release.user_fraction}")
+    end
+  end
+
+  lane :status do |options|
+    client = play_client(options[:package_name])
+    client.tracks.each do |track|
+      (track.releases || []).each do |release|
+        UI.message("#{track.track}: #{release.name} version_codes=#{(release.version_codes || []).join(',')} status=#{release.status} user_fraction=#{release.user_fraction}")
+      end
+    end
+    client.abort_current_edit
   end
 end
 
@@ -54,11 +118,23 @@ platform :ios do
       app_version: options[:app_version],
       build_number: options[:build_number],
       skip_binary_upload: true,
-      skip_metadata: true,
       skip_screenshots: true,
       submit_for_review: true,
       force: true,
-      run_precheck_before_submit: false
+      run_precheck_before_submit: false,
+      **app_store_release_notes(options)
     )
+  end
+
+  lane :status do |options|
+    app = Spaceship::ConnectAPI::App.find(options[:app_identifier])
+    UI.user_error!("App #{options[:app_identifier]} not found") unless app
+
+    app.get_app_store_versions(limit: 3).each do |version|
+      UI.message("App Store version #{version.version_string}: #{version.app_version_state}")
+    end
+    Spaceship::ConnectAPI.get_builds(filter: { app: app.id }, sort: "-uploadedDate", limit: 5, includes: "preReleaseVersion").to_models.each do |build|
+      UI.message("Build #{build.app_version} (#{build.version}): #{build.processing_state}, uploaded #{build.uploaded_date}")
+    end
   end
 end
