@@ -12,9 +12,10 @@ Servidor MCP (Model Context Protocol) para enviar um `.aab` para uma faixa de te
 - `release_ios` — anexa um build do TestFlight a uma versão da App Store, cria a versão se ela não existir e envia para review, com as novidades da versão opcionais
 - `status_ios` — mostra as últimas versões da App Store com o estado de cada uma e os últimos builds com o estado do processamento
 - `upload_screenshots_ios` — substitui as screenshots de uma versão da App Store pelas imagens de uma pasta
+- `update_review_info_ios` — define o usuário e a senha de demonstração e as notas das informações para a equipe de revisão de uma versão da App Store
 - `upload_screenshots_android` — substitui as screenshots da ficha da Google Play pelas imagens de uma pasta
 
-`promote_android`, `update_rollout_android`, `release_ios` e as duas ferramentas de screenshot só publicam com `confirm=true`. Sem ele, as ferramentas do Android validam a mudança na Google Play sem publicar nada, `release_ios` só descreve o que vai fazer e `upload_screenshots_ios` lista as imagens que encontrou.
+`promote_android`, `update_rollout_android`, `release_ios`, `update_review_info_ios` e as duas ferramentas de screenshot só publicam com `confirm=true`. Sem ele, as ferramentas do Android validam a mudança na Google Play sem publicar nada, `release_ios` e `update_review_info_ios` só descrevem o que vão fazer e `upload_screenshots_ios` lista as imagens que encontrou.
 
 ### Organização das screenshots
 
@@ -169,5 +170,6 @@ Os testes não chamam o fastlane nem as lojas. O CI (GitHub Actions, branch `mai
 - Sem `release_notes`, `release_ios` não altera os metadados da versão, e as novidades precisam estar preenchidas no App Store Connect. Com `release_notes`, o texto vai para todos os idiomas da versão publicada, ou para o idioma principal do app se ainda não houver versão publicada.
 - No `promote_android`, `locale` é o código de idioma da Play para as notas da versão, por padrão `pt-BR`.
 - O `Info.plist` do app precisa declarar `ITSAppUsesNonExemptEncryption`; sem isso, a Apple pede a conformidade de exportação e o envio para review falha.
+- `update_review_info_ios` marca o início de sessão como obrigatório e não altera os dados de contato. A senha passa como parâmetro da ferramenta e fica no histórico da conversa. No Android, o equivalente é a seção "Acesso ao app" da Play Console, que a API da Play não expõe: preencha pela Play Console.
 - `rollout` aceita valores maiores que 0 e até 1. Abaixo de 1, a release entra em produção como lançamento gradual. Para retomar uma release parada, chame `update_rollout_android` com uma nova fração.
 - Cada ferramenta devolve as últimas 40 linhas da saída do fastlane e tem timeout de 30 minutos.

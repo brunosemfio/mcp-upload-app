@@ -146,6 +146,32 @@ platform :ios do
     )
   end
 
+  lane :review_info do |options|
+    app = Spaceship::ConnectAPI::App.find(options[:app_identifier])
+    UI.user_error!("App #{options[:app_identifier]} not found") unless app
+
+    platform = Spaceship::ConnectAPI::Platform::IOS
+    app.ensure_version!(options[:app_version], platform: platform)
+    version = app.get_edit_app_store_version(platform: platform)
+    attributes = {
+      "demo_account_required" => true,
+      "demo_account_name" => options[:demo_user],
+      "demo_account_password" => options[:demo_password],
+      "notes" => options[:notes]
+    }.compact
+    detail = begin
+      version.fetch_app_store_review_detail
+    rescue StandardError
+      nil
+    end
+    if detail
+      detail.update(attributes: attributes)
+    else
+      version.create_app_store_review_detail(attributes: attributes)
+    end
+    UI.success("App Review sign-in of version #{version.version_string} set to #{options[:demo_user]}")
+  end
+
   lane :screenshots do |options|
     upload_to_app_store(
       app_identifier: options[:app_identifier],

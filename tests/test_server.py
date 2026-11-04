@@ -231,3 +231,40 @@ def test_upload_screenshots_rejects_wrong_layout(lanes, tmp_path):
     with pytest.raises(ValueError, match="No screenshots found"):
         _tool("upload_screenshots_ios")("com.example.app", "1.2.0", str(tmp_path / "missing"))
     assert lanes == []
+
+
+def test_update_review_info_ios_without_confirm_hides_password(lanes):
+    result = _tool("update_review_info_ios")(
+        "com.example.app", "1.2.0", "demo@example.com", "s3cret"
+    )
+    assert "demo@example.com" in result
+    assert "s3cret" not in result
+    assert lanes == []
+
+
+def test_update_review_info_ios_with_confirm(lanes):
+    _tool("update_review_info_ios")(
+        "com.example.app",
+        "1.2.0",
+        "demo@example.com",
+        "s3cret",
+        notes="Use o código 1234",
+        confirm=True,
+    )
+    assert lanes[0][0] == [
+        "fastlane",
+        "ios",
+        "review_info",
+        "app_identifier:com.example.app",
+        "app_version:1.2.0",
+        "demo_user:demo@example.com",
+        "demo_password:s3cret",
+        "notes:Use o código 1234",
+    ]
+
+
+@pytest.mark.parametrize("user, password", [("", "s3cret"), ("demo@example.com", " ")])
+def test_update_review_info_ios_needs_user_and_password(lanes, user, password):
+    with pytest.raises(ValueError, match="must not be empty"):
+        _tool("update_review_info_ios")("com.example.app", "1.2.0", user, password, confirm=True)
+    assert lanes == []

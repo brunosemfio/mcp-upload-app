@@ -70,8 +70,8 @@ mcp = FastMCP(
         "its path. Use status_android and status_ios to see what is in each track, whether an "
         "iOS build finished processing and the current rollout. The screenshot tools take a "
         "folder laid out as the resource upload-app://screenshots/layout describes. "
-        "promote_android, update_rollout_android, release_ios and the screenshot tools publish "
-        "only with confirm=true; without it they show what would happen."
+        "promote_android, update_rollout_android, release_ios, update_review_info_ios and the "
+        "screenshot tools publish only with confirm=true; without it they show what would happen."
     ),
 )
 
@@ -288,6 +288,40 @@ def upload_screenshots_ios(
         app_identifier=app_identifier,
         app_version=app_version,
         folder=absolute(folder),
+    )
+
+
+@mcp.tool(
+    description=(
+        "Set the App Review sign-in information of an App Store version: the demo account user "
+        "and password, with optional notes for the reviewer. Contact details stay as they are. "
+        "Creates the version if needed. Without confirm=true it only describes what it would do."
+    )
+)
+def update_review_info_ios(
+    app_identifier: str,
+    app_version: str,
+    demo_user: str,
+    demo_password: str,
+    notes: str | None = None,
+    confirm: bool = False,
+) -> str:
+    if not demo_user.strip() or not demo_password.strip():
+        raise ValueError("demo_user and demo_password must not be empty")
+    if not confirm:
+        with_notes = " and the given notes" if notes else ""
+        return (
+            f"Would set the App Review sign-in of version {app_version} of {app_identifier} to "
+            f"user {demo_user}{with_notes}. Call again with confirm=true."
+        )
+    return run_lane(
+        "ios",
+        "review_info",
+        app_identifier=app_identifier,
+        app_version=app_version,
+        demo_user=demo_user,
+        demo_password=demo_password,
+        notes=notes,
     )
 
 
