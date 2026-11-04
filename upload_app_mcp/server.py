@@ -17,15 +17,61 @@ FASTLANE_ENV = {
     "FASTLANE_SKIP_DOCS": "1",
 }
 
+SCREENSHOT_LAYOUT = """\
+# Screenshot folder layout
+
+Save the screenshots of each store in its own folder, with one subfolder per language. Each
+store uploads the images in file name order, so prefix them with 01-, 02-, 03-.
+
+## App Store (upload_screenshots_ios)
+
+    folder/
+      pt-BR/
+        01-home.png      1320x2868, iPhone 6.9"
+        02-search.png    1320x2868
+        03-ipad-home.png 2064x2752, iPad 13"
+
+- The images go straight in the language folder. fastlane detects the device from the image
+  size, so each image must have the exact size of an App Store screenshot type.
+- Language folders use App Store Connect locale codes, such as pt-BR, en-US and es-MX. A folder
+  for a language the version does not have adds that language to the version.
+- Up to 10 images per device and language, PNG or JPEG.
+- For each language in the folder, every existing screenshot of that language is deleted
+  first, on every device. Languages not in the folder stay as they are.
+
+## Google Play (upload_screenshots_android)
+
+    folder/
+      pt-BR/
+        images/
+          phoneScreenshots/
+            01-home.png
+            02-search.png
+          tenInchScreenshots/
+            01-home.png
+
+- The device folder is required, because Google Play does not detect the device from the
+  image size: phoneScreenshots, sevenInchScreenshots, tenInchScreenshots, tvScreenshots or
+  wearScreenshots.
+- Language folders use Google Play language codes, such as pt-BR, en-US and es-419 for Latin
+  American Spanish.
+- 2 to 8 images per device and language, PNG or JPEG.
+- Only the device folders that have images replace the existing screenshots. The store
+  listing changes for everyone after Google Play reviews it, independent of any release.
+"""
+
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
+
 mcp = FastMCP(
     name="upload-app",
     instructions=(
         "Uploads an already built .aab to a Google Play test track or an .ipa to TestFlight, "
         "then promotes it to production. The app project builds the file; these tools only take "
         "its path. Use status_android and status_ios to see what is in each track, whether an "
-        "iOS build finished processing and the current rollout. promote_android, "
-        "update_rollout_android and release_ios publish only with confirm=true; without it they "
-        "show what would happen."
+        "iOS build finished processing and the current rollout. The screenshot tools take a "
+        "folder laid out as the resource upload-app://screenshots/layout describes. "
+        "promote_android, update_rollout_android, release_ios and the screenshot tools publish "
+        "only with confirm=true; without it they show what would happen."
     ),
 )
 
@@ -55,6 +101,22 @@ def validate_or_publish(lane: str, confirm: bool, **options: object) -> str:
     return f"Validated with Google Play, nothing published. Call again with confirm=true.\n{output}"
 
 
+def absolute(path: str) -> str:
+    return str(Path(path).expanduser().absolute())
+
+
+def count_screenshots(folder: str, pattern: str) -> dict[str, int]:
+    root = Path(folder).expanduser()
+    counts = {}
+    for language in sorted(root.iterdir()) if root.is_dir() else []:
+        images = [f for f in language.glob(pattern) if f.suffix.lower() in IMAGE_SUFFIXES]
+        if images:
+            counts[language.name] = len(images)
+    if not counts:
+        raise ValueError(f"No screenshots found in {folder}.\n\n{SCREENSHOT_LAYOUT}")
+    return counts
+
+
 def check_test_track(track: str) -> None:
     if track == "production":
         raise ValueError("track must be a test track; use promote_android for production")
@@ -73,7 +135,9 @@ def check_rollout(rollout: float) -> None:
 )
 def upload_android(aab_path: str, package_name: str, track: str = "internal") -> str:
     check_test_track(track)
-    return run_lane("android", "upload", aab=aab_path, package_name=package_name, track=track)
+    return run_lane(
+        "android", "upload", aab=absolute(aab_path), package_name=package_name, track=track
+    )
 
 
 @mcp.tool(
@@ -147,7 +211,7 @@ def status_android(package_name: str) -> str:
 
 @mcp.tool(description="Upload an .ipa to TestFlight without waiting for Apple's processing.")
 def upload_ios(ipa_path: str) -> str:
-    return run_lane("ios", "upload", ipa=ipa_path)
+    return run_lane("ios", "upload", ipa=absolute(ipa_path))
 
 
 @mcp.tool(
@@ -188,6 +252,59 @@ def release_ios(
 )
 def status_ios(app_identifier: str) -> str:
     return run_lane("ios", "status", app_identifier=app_identifier)
+
+
+@mcp.resource(
+    "upload-app://screenshots/layout",
+    name="screenshots-layout",
+    description="Folder layout the screenshot tools expect for the App Store and Google Play.",
+    mime_type="text/markdown",
+)
+def screenshots_layout() -> str:
+    return SCREENSHOT_LAYOUT
+
+
+@mcp.tool(
+    description=(
+        "Replace the App Store screenshots of an app version with the images in folder, one "
+        "subfolder per App Store Connect locale with the images straight inside, as the resource "
+        "upload-app://screenshots/layout describes. Creates the version if needed. Without "
+        "confirm=true it only lists the images it found."
+    )
+)
+def upload_screenshots_ios(
+    app_identifier: str, app_version: str, folder: str, confirm: bool = False
+) -> str:
+    counts = count_screenshots(folder, "*")
+    if not confirm:
+        found = ", ".join(f"{language}: {count}" for language, count in counts.items())
+        return (
+            f"Would replace the screenshots of version {app_version} of {app_identifier} in "
+            f"these languages, on every device: {found}. Call again with confirm=true."
+        )
+    return run_lane(
+        "ios",
+        "screenshots",
+        app_identifier=app_identifier,
+        app_version=app_version,
+        folder=absolute(folder),
+    )
+
+
+@mcp.tool(
+    description=(
+        "Replace the Google Play store listing screenshots with the images in "
+        "folder/<language>/images/<device>Screenshots/, as the resource "
+        "upload-app://screenshots/layout describes. The listing changes for everyone after "
+        "Google Play reviews it. Without confirm=true it only validates with Google Play and "
+        "publishes nothing."
+    )
+)
+def upload_screenshots_android(package_name: str, folder: str, confirm: bool = False) -> str:
+    count_screenshots(folder, "images/*Screenshots/*")
+    return validate_or_publish(
+        "screenshots", confirm, package_name=package_name, folder=absolute(folder)
+    )
 
 
 def main() -> None:

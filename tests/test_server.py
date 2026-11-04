@@ -170,3 +170,64 @@ def test_production_is_not_a_test_track(lanes):
     with pytest.raises(ValueError, match="test track"):
         _tool("promote_android")("com.example.app", 42, from_track="production")
     assert lanes == []
+
+
+def _images(root, *relative_paths):
+    for relative in relative_paths:
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"png")
+    return str(root)
+
+
+def test_screenshots_layout_resource():
+    assert _tool("screenshots_layout")() == server.SCREENSHOT_LAYOUT
+
+
+def test_upload_paths_become_absolute(lanes, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _tool("upload_android")("build/app.aab", "com.example.app")
+    _tool("upload_ios")("build/app.ipa")
+    assert lanes[0][0][3] == f"aab:{tmp_path}/build/app.aab"
+    assert lanes[1][0][3] == f"ipa:{tmp_path}/build/app.ipa"
+
+
+def test_upload_screenshots_ios_without_confirm_lists_images(lanes, tmp_path):
+    folder = _images(tmp_path, "pt-BR/01.png", "pt-BR/02.PNG", "en-US/01.jpg", "pt-BR/notes.txt")
+    result = _tool("upload_screenshots_ios")("com.example.app", "1.2.0", folder)
+    assert "en-US: 1, pt-BR: 2" in result
+    assert lanes == []
+
+
+def test_upload_screenshots_ios_with_confirm(lanes, tmp_path):
+    folder = _images(tmp_path, "pt-BR/01.png")
+    _tool("upload_screenshots_ios")("com.example.app", "1.2.0", folder, confirm=True)
+    assert lanes[0][0] == [
+        "fastlane",
+        "ios",
+        "screenshots",
+        "app_identifier:com.example.app",
+        "app_version:1.2.0",
+        f"folder:{tmp_path}",
+    ]
+
+
+def test_upload_screenshots_android_validates_by_default(lanes, tmp_path):
+    folder = _images(tmp_path, "pt-BR/images/phoneScreenshots/01.png")
+    result = _tool("upload_screenshots_android")("com.example.app", folder)
+    assert "nothing published" in result
+    assert lanes[0][0][2:] == [
+        "screenshots",
+        "validate_only:true",
+        "package_name:com.example.app",
+        f"folder:{tmp_path}",
+    ]
+
+
+def test_upload_screenshots_rejects_wrong_layout(lanes, tmp_path):
+    folder = _images(tmp_path, "pt-BR/01.png")
+    with pytest.raises(ValueError, match="Screenshot folder layout"):
+        _tool("upload_screenshots_android")("com.example.app", folder)
+    with pytest.raises(ValueError, match="No screenshots found"):
+        _tool("upload_screenshots_ios")("com.example.app", "1.2.0", str(tmp_path / "missing"))
+    assert lanes == []

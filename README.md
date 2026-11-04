@@ -11,8 +11,34 @@ Servidor MCP (Model Context Protocol) para enviar um `.aab` para uma faixa de te
 - `upload_ios` — envia um `.ipa` para o TestFlight, sem esperar o processamento da Apple
 - `release_ios` — anexa um build do TestFlight a uma versão da App Store, cria a versão se ela não existir e envia para review, com as novidades da versão opcionais
 - `status_ios` — mostra as últimas versões da App Store com o estado de cada uma e os últimos builds com o estado do processamento
+- `upload_screenshots_ios` — substitui as screenshots de uma versão da App Store pelas imagens de uma pasta
+- `upload_screenshots_android` — substitui as screenshots da ficha da Google Play pelas imagens de uma pasta
 
-`promote_android`, `update_rollout_android` e `release_ios` só publicam com `confirm=true`. Sem ele, as duas ferramentas do Android validam a mudança na Google Play sem publicar nada, e `release_ios` só descreve o que vai fazer.
+`promote_android`, `update_rollout_android`, `release_ios` e as duas ferramentas de screenshot só publicam com `confirm=true`. Sem ele, as ferramentas do Android validam a mudança na Google Play sem publicar nada, `release_ios` só descreve o que vai fazer e `upload_screenshots_ios` lista as imagens que encontrou.
+
+### Organização das screenshots
+
+As ferramentas de screenshot recebem uma pasta por loja, com uma subpasta por idioma. O servidor publica o padrão completo no resource MCP `upload-app://screenshots/layout`, para que skills e agentes leiam a regra direto do servidor.
+
+```
+screenshots-ios/
+  pt-BR/
+    01-home.png          1320×2868, iPhone 6,9"
+    02-ipad-home.png     2064×2752, iPad 13"
+
+screenshots-android/
+  pt-BR/
+    images/
+      phoneScreenshots/
+        01-home.png
+      tenInchScreenshots/
+        01-home.png
+```
+
+- No iOS, o fastlane descobre o aparelho pela resolução, e as imagens ficam soltas na pasta do idioma. Para cada idioma da pasta, todas as screenshots daquele idioma são apagadas antes, em todos os aparelhos.
+- No Android, a subpasta diz o aparelho: `phoneScreenshots`, `sevenInchScreenshots`, `tenInchScreenshots`, `tvScreenshots` ou `wearScreenshots`. Só os aparelhos com imagens na pasta são substituídos.
+- As imagens sobem na ordem do nome do arquivo.
+- Os códigos de idioma seguem cada loja. Para espanhol da América Latina, use `es-MX` no iOS e `es-419` no Android.
 
 ## Pré-requisitos
 
@@ -34,7 +60,7 @@ brew install uv git fastlane
 ### 1. Google Play
 
 1. No Google Cloud, habilite a [Google Play Android Developer API](https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com), crie uma service account e baixe a chave JSON.
-2. No Play Console, em **Usuários e permissões → Convidar novo usuário**, convide o e-mail da service account com as permissões de lançamento em faixas de teste e em produção nos apps desejados.
+2. No Play Console, em **Usuários e permissões → Convidar novo usuário**, convide o e-mail da service account com as permissões de lançamento em faixas de teste e em produção nos apps desejados. Para `upload_screenshots_android`, a service account também precisa da permissão de gerenciar a presença na loja.
 3. Guarde a chave num local fixo e anote o caminho completo. O caminho vai na variável `GOOGLE_APPLICATION_CREDENTIALS` quando você registrar o servidor no cliente MCP.
 
 Se você já criou o arquivo `~/.config/google-play-console/.env` para o [mcp-google-play-console](https://github.com/brunosemfio/mcp-google-play-console), este servidor lê o mesmo arquivo. Acrescente ao arquivo o caminho da chave de publicação na variável `SUPPLY_JSON_KEY`:

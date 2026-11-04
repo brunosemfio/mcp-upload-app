@@ -19,6 +19,16 @@ def play_client(package_name)
   client
 end
 
+def finish_play_edit(client, options, summary)
+  if options[:validate_only] == true
+    client.validate_current_edit!
+    UI.success("Validated with Google Play, nothing published: #{summary}")
+  else
+    client.commit_current_edit!
+    UI.success("Published: #{summary}")
+  end
+end
+
 def play_release_notes(options)
   return { skip_upload_changelogs: true } unless options[:release_notes]
 
@@ -79,14 +89,23 @@ platform :android do
     end
     track.releases = [release]
     client.update_track("production", track)
+    finish_play_edit(client, options, "production release #{options[:version_code]} #{release.status} #{release.user_fraction}")
+  end
 
-    if options[:validate_only] == true
-      client.validate_current_edit!
-      UI.success("Validated #{release.status} #{release.user_fraction} with Google Play, nothing published")
-    else
-      client.commit_current_edit!
-      UI.success("Production release #{options[:version_code]} is now #{release.status} #{release.user_fraction}")
+  lane :screenshots do |options|
+    client = play_client(options[:package_name])
+    uploaded = []
+    Dir.children(options[:folder]).sort.each do |language|
+      Supply::SCREENSHOT_TYPES.each do |type|
+        paths = Dir.glob(File.join(options[:folder], language, "images", type, "*.{png,jpg,jpeg}"), File::FNM_CASEFOLD).sort
+        next if paths.empty?
+
+        client.clear_screenshots(image_type: type, language: language)
+        paths.each { |path| client.upload_image(image_path: path, image_type: type, language: language) }
+        uploaded << "#{language} #{type}: #{paths.count}"
+      end
     end
+    finish_play_edit(client, options, uploaded.join(", "))
   end
 
   lane :status do |options|
@@ -124,6 +143,19 @@ platform :ios do
       force: true,
       run_precheck_before_submit: false,
       **app_store_release_notes(options)
+    )
+  end
+
+  lane :screenshots do |options|
+    upload_to_app_store(
+      app_identifier: options[:app_identifier],
+      app_version: options[:app_version],
+      screenshots_path: options[:folder],
+      overwrite_screenshots: true,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      force: true,
+      run_precheck_before_submit: false
     )
   end
 
