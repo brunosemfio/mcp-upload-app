@@ -263,6 +263,30 @@ def test_update_review_info_ios_with_confirm(lanes):
     ]
 
 
+def test_update_age_rating_ios_without_confirm_is_a_dry_run(lanes, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _tool("update_age_rating_ios")("com.example.app", "idade.json")
+    assert lanes[0][0] == [
+        "fastlane",
+        "ios",
+        "age_rating",
+        "app_identifier:com.example.app",
+        f"answers:{tmp_path}/idade.json",
+        "dry_run:true",
+    ]
+
+
+def test_update_age_rating_ios_with_confirm(lanes):
+    _tool("update_age_rating_ios")("com.example.app", "/tmp/idade.json", confirm=True)
+    assert lanes[0][0] == [
+        "fastlane",
+        "ios",
+        "age_rating",
+        "app_identifier:com.example.app",
+        "answers:/tmp/idade.json",
+    ]
+
+
 @pytest.mark.parametrize("user, password", [("", "s3cret"), ("demo@example.com", " ")])
 def test_update_review_info_ios_needs_user_and_password(lanes, user, password):
     with pytest.raises(ValueError, match="must not be empty"):

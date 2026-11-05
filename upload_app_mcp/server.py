@@ -70,8 +70,9 @@ mcp = FastMCP(
         "its path. Use status_android and status_ios to see what is in each track, whether an "
         "iOS build finished processing and the current rollout. The screenshot tools take a "
         "folder laid out as the resource upload-app://screenshots/layout describes. "
-        "promote_android, update_rollout_android, release_ios, update_review_info_ios and the "
-        "screenshot tools publish only with confirm=true; without it they show what would happen."
+        "promote_android, update_rollout_android, release_ios, update_review_info_ios, "
+        "update_age_rating_ios and the screenshot tools publish only with confirm=true; without "
+        "it they show what would happen."
     ),
 )
 
@@ -322,6 +323,27 @@ def update_review_info_ios(
         demo_user=demo_user,
         demo_password=demo_password,
         notes=notes,
+    )
+
+
+@mcp.tool(
+    description=(
+        "Answer the App Store age rating questions of the app version in preparation with the "
+        "answers in a JSON file. The keys are App Store Connect ageRatingDeclaration attribute "
+        'names and the values are Apple\'s, such as {"ageRatingOverrideV2": "EIGHTEEN_PLUS", '
+        '"matureOrSuggestiveThemes": "FREQUENT", "userGeneratedContent": false}. Questions '
+        "missing from the file stay as they are. Run it before release_ios when the release "
+        "fails for a missing attribute such as userGeneratedContent. The version must already "
+        "exist. Without confirm=true it only lists the answers that would change."
+    )
+)
+def update_age_rating_ios(app_identifier: str, answers_path: str, confirm: bool = False) -> str:
+    return run_lane(
+        "ios",
+        "age_rating",
+        app_identifier=app_identifier,
+        answers=absolute(answers_path),
+        dry_run=None if confirm else "true",
     )
 
 

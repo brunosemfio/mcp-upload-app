@@ -14,8 +14,25 @@ Servidor MCP (Model Context Protocol) para enviar um `.aab` para uma faixa de te
 - `upload_screenshots_ios` — substitui as screenshots de uma versão da App Store pelas imagens de uma pasta
 - `update_review_info_ios` — define o usuário e a senha de demonstração e as notas das informações para a equipe de revisão de uma versão da App Store
 - `upload_screenshots_android` — substitui as screenshots da ficha da Google Play pelas imagens de uma pasta
+- `update_age_rating_ios` — responde a classificação etária da App Store da versão em preparação com as respostas de um arquivo JSON. A versão precisa existir antes
 
-`promote_android`, `update_rollout_android`, `release_ios`, `update_review_info_ios` e as duas ferramentas de screenshot só publicam com `confirm=true`. Sem ele, as ferramentas do Android validam a mudança na Google Play sem publicar nada, `release_ios` e `update_review_info_ios` só descrevem o que vão fazer e `upload_screenshots_ios` lista as imagens que encontrou.
+`promote_android`, `update_rollout_android`, `release_ios`, `update_review_info_ios`, `update_age_rating_ios` e as duas ferramentas de screenshot só publicam com `confirm=true`. Sem ele, as ferramentas do Android validam a mudança na Google Play sem publicar nada, `release_ios` e `update_review_info_ios` só descrevem o que vão fazer, `update_age_rating_ios` lista as respostas que mudariam e `upload_screenshots_ios` lista as imagens que encontrou.
+
+### Arquivo de classificação etária
+
+O `update_age_rating_ios` recebe em `answers_path` um JSON com os nomes de campo e os valores do recurso `ageRatingDeclarations` da App Store Connect API. São os mesmos nomes que aparecem nos erros do `release_ios`, como `userGeneratedContent`:
+
+```json
+{
+  "ageRatingOverrideV2": "EIGHTEEN_PLUS",
+  "matureOrSuggestiveThemes": "FREQUENT",
+  "userGeneratedContent": false
+}
+```
+
+- As perguntas que não estão no arquivo ficam como estão.
+- Um nome de campo desconhecido faz a ferramenta parar antes de chamar a Apple e listar os nomes válidos.
+- Cada projeto guarda o próprio arquivo, porque as respostas dependem do conteúdo do app.
 
 ### Organização das screenshots
 

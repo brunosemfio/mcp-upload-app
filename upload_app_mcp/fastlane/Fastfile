@@ -1,4 +1,5 @@
 require "dotenv"
+require "json"
 require "tmpdir"
 
 Dotenv.load(File.expand_path(ENV.fetch("APP_STORE_CONNECT_ENV_FILE", "~/.config/app-store-connect/.env")))
@@ -170,6 +171,31 @@ platform :ios do
       version.create_app_store_review_detail(attributes: attributes)
     end
     UI.success("App Review sign-in of version #{version.version_string} set to #{options[:demo_user]}")
+  end
+
+  lane :age_rating do |options|
+    answers = JSON.parse(File.read(options[:answers]))
+    fields = Spaceship::ConnectAPI::AgeRatingDeclaration.reverse_attr_map.values
+    unknown = answers.keys - fields
+    UI.user_error!("Unknown age rating fields #{unknown.join(', ')}; use #{fields.sort.join(', ')}") if unknown.any?
+
+    app = Spaceship::ConnectAPI::App.find(options[:app_identifier])
+    UI.user_error!("App #{options[:app_identifier]} not found") unless app
+
+    info = app.fetch_edit_app_info
+    UI.user_error!("App #{options[:app_identifier]} has no version in preparation; create it first, for example with update_review_info_ios") unless info
+
+    declaration = info.fetch_age_rating_declaration
+    changes = answers.reject { |key, value| declaration.public_send(key) == value }
+    changes.each { |key, value| UI.message("#{key}: #{declaration.public_send(key).inspect} -> #{value.inspect}") }
+    if changes.empty?
+      UI.success("Age rating of #{options[:app_identifier]} already has every answer")
+    elsif options[:dry_run] == true
+      UI.success("Would change #{changes.count} age rating answers of #{options[:app_identifier]}, nothing saved")
+    else
+      declaration.update(attributes: changes)
+      UI.success("Changed #{changes.count} age rating answers of #{options[:app_identifier]}")
+    end
   end
 
   lane :screenshots do |options|
